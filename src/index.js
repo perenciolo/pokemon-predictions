@@ -1,132 +1,12 @@
-import * as tf from "@tensorflow/tfjs";
-import * as tfVis from "@tensorflow/tfjs-vis";
 import Plotly from "plotly.js-dist";
 import _ from "lodash";
 import shuffleSeed from "shuffle-seed";
+import LogisticRegression from "./logistic-regression";
 
 const loadData = async () => {
   const res = await fetch("http://localhost:3031/data");
   return res.json();
 };
-
-// const renderOutcomes = (data) => {
-//   const outcomes = data.map((r) => r.Outcome);
-//   const [diabetic, healthy] = _.partition(outcomes, (outcome) => outcome === 1);
-//   const chartData = [
-//     {
-//       labels: ["Diabetic", "Healthy"],
-//       values: [diabetic.length, healthy.length],
-//       type: "pie",
-//       opacity: 0.6,
-//     },
-//   ];
-//   Plotly.newPlot("outcome-container", chartData);
-// };
-
-// const renderHistogram = (container, data, column, config) => {
-//   const diabetic = data
-//     .filter((row) => row.Outcome === 1)
-//     .map((row) => row[column]);
-//   const healthy = data
-//     .filter((row) => row.Outcome === 0)
-//     .map((row) => row[column]);
-//   const dTrace = {
-//     name: "diabetic",
-//     x: diabetic,
-//     opacity: 0.5,
-//     type: "histogram",
-//   };
-//   const hTrace = {
-//     name: "healthy",
-//     x: healthy,
-//     opacity: 0.5,
-//     type: "histogram",
-//   };
-//   Plotly.newPlot(container, [dTrace, hTrace], {
-//     barmode: "overlay",
-//     title: config.title,
-//     xaxis: {
-//       title: config.xLabel,
-//     },
-//     yaxis: {
-//       title: config.yLabel,
-//     },
-//   });
-// };
-
-// const renderScatter = (container, data, columns, config) => {
-//   const diabetic = data.filter((row) => row.Outcome === 1);
-//   const healthy = data.filter((row) => row.Outcome === 0);
-//   const dTrace = {
-//     name: "diabetic",
-//     x: diabetic.map((row) => row[columns[0]]),
-//     y: diabetic.map((row) => row[columns[1]]),
-//     opacity: 0.5,
-//     mode: "markers",
-//     type: "scatter",
-//   };
-//   const hTrace = {
-//     name: "healthy",
-//     x: healthy.map((row) => row[columns[0]]),
-//     y: healthy.map((row) => row[columns[1]]),
-//     opacity: 0.5,
-//     mode: "markers",
-//     type: "scatter",
-//   };
-//   const chartData = [dTrace, hTrace];
-//   Plotly.newPlot(container, chartData, {
-//     title: config.title,
-//     xaxis: {
-//       title: config.xLabel,
-//     },
-//     yaxis: {
-//       title: config.yLabel,
-//     },
-//   });
-// };
-
-// const oneHot = (outcome) => Array.from(tf.oneHot([outcome], 2).dataSync());
-
-// const trainLogisticRegression = async (
-//   featureCount,
-//   trainDataset,
-//   validDataset
-// ) => {
-//   const model = tf.sequential();
-//   model.add(
-//     tf.layers.dense({
-//       units: 12,
-//       activation: "relu",
-//       inputShape: [featureCount],
-//     })
-//   );
-//   model.add(
-//     tf.layers.dense({
-//       units: 2,
-//       activation: "softmax",
-//     })
-//   );
-//   model.compile({
-//     optimizer: tf.train.adam(0.001),
-//     loss: "binaryCrossentropy",
-//     metrics: ["accuracy"],
-//   });
-//   const trainLogs = [];
-//   const lossContainer = document.getElementById("loss-container");
-//   const accuracyContainer = document.getElementById("accuracy-container");
-//   await model.fitDataset(trainDataset, {
-//     epochs: 100,
-//     validationData: validDataset,
-//     callbacks: {
-//       onEpochEnd: async (epoch, logs) => {
-//         trainLogs.push(logs);
-//         tfVis.show.history(lossContainer, trainLogs, ["loss", "val_loss"]);
-//         tfVis.show.history(accuracyContainer, trainLogs, ["acc", "val_acc"]);
-//       },
-//     },
-//   });
-//   return model;
-// };
 
 const extractLabelData = (data, label) => {
   return Object.entries(_.groupBy(data, (el) => el[label]))
@@ -266,16 +146,37 @@ const createDatasets = (
       ? splitTest
       : Math.floor(dataset.length / 2);
     return {
-      features: dataset.slice(trainSize),
-      labels: labels.slice(trainSize),
-      testFeatures: dataset.slice(0, trainSize),
-      testLabels: labels.slice(0, trainSize),
+      features: dataset.slice(0, trainSize),
+      labels: labels.slice(0, trainSize),
+      testFeatures: dataset.slice(trainSize),
+      testLabels: labels.slice(trainSize),
     };
   }
   return {
     features: dataset,
     labels,
   };
+};
+
+const runModel = (dataset) => {
+  const { features, labels, testFeatures, testLabels } = createDatasets(
+    dataset,
+    {
+      shuffle: true,
+      splitTest: 500,
+      labelsCol: [20],
+    }
+  );
+  const regression = new LogisticRegression(features, labels, {
+    learningRate: 1,
+    iterations: 20,
+    batchSize: 100,
+  });
+
+  regression.train();
+
+  const accuracy = regression.test(testFeatures, testLabels);
+  console.log(`Accuracy is ${accuracy}`);
 };
 
 const run = async () => {
@@ -312,12 +213,7 @@ const run = async () => {
   ]);
 
   const dataset = mergeDatasets(combats, pokemonDataset);
-  const datasets = createDatasets(dataset, {
-    shuffle: true,
-    splitTest: 30000,
-    labelsCol: [20],
-  });
-  console.log(datasets);
+  runModel(dataset);
 };
 
 if (document.readyState !== "loading") {
